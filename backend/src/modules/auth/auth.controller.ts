@@ -6,7 +6,12 @@ import {
   loginSchema,
   registerSchema,
 } from "../../common/validators/auth.validators.js";
-import { setAuthenticationCookies } from "../../common/utils/cookie.js";
+import {
+  getAccessTokenCookieOptions,
+  getRefreshTokenCookieOptions,
+  setAuthenticationCookies,
+} from "../../common/utils/cookie.js";
+import { UnauthorizedException } from "../../common/utils/catch-error.js";
 
 export class AuthController {
   private authService: AuthService;
@@ -44,6 +49,30 @@ export class AuthController {
         .json({
           message: "User logged in successfully",
           user,
+        });
+    },
+  );
+
+  public refreshToken = asyncHandler(
+    async (req: Request, res: Response): Promise<any> => {
+      const refreshToken = req.cookies.refreshToken as string | undefined;
+      if (!refreshToken) {
+        throw new UnauthorizedException("User not authorized");
+      }
+      const { accessToken, newRefreshToken } =
+        await this.authService.refreshToken(refreshToken);
+      if (newRefreshToken) {
+        res.cookie(
+          "refreshToken",
+          newRefreshToken,
+          getRefreshTokenCookieOptions(),
+        );
+      }
+      return res
+        .status(HTTPSTATUS.OK)
+        .cookie("accessToken", accessToken, getAccessTokenCookieOptions())
+        .json({
+          message: "Refresh access token successfully",
         });
     },
   );

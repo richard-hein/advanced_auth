@@ -1,3 +1,4 @@
+import type { RefreshTPayload } from "../../common/utils/jwt.js";
 import jwt from "jsonwebtoken";
 import { ErrorCode } from "../../common/enums/error-code.enum.js";
 import { VerificationEnum } from "../../common/enums/verification-code.enum.js";
@@ -5,12 +6,24 @@ import type {
   loginDto,
   RegisterDto,
 } from "../../common/interface/auth.interface.js";
-import { BadRequestException } from "../../common/utils/catch-error.js";
-import { fortyFiveMinutesFromNow } from "../../common/utils/date-time.js";
+import {
+  BadRequestException,
+  UnauthorizedException,
+} from "../../common/utils/catch-error.js";
+import {
+  calculateExpirationDate,
+  fortyFiveMinutesFromNow,
+  ONE_DAY_IN_MS,
+} from "../../common/utils/date-time.js";
 import SessionModel from "../../database/models/session.model.js";
 import UserModel from "../../database/models/user.model.js";
 import VerificationCodeModel from "../../database/models/verification.model.js";
 import { config } from "../../config/app.config.js";
+import {
+  refreshTokenSignOptions,
+  signJwtToken,
+  verifyJwtToken,
+} from "../../common/utils/jwt.js";
 
 export class AuthService {
   // Register
@@ -66,28 +79,62 @@ export class AuthService {
       userId: user._id,
       userAgent,
     });
-    const accessToken = jwt.sign(
-      { userId: user._id, sessionId: session._id },
-      config.JWT.SECRET,
-      {
-        audience: ["user"],
-        expiresIn: config.JWT.EXPIRES_IN,
-      },
-    );
-    const refreshToken = jwt.sign(
-      { sessionId: session._id },
-      config.JWT.SECRET,
-      {
-        audience: ["user"],
-        expiresIn: config.JWT.REFRESH_EXPIRES_IN,
-      },
-    );
+    const accessToken = signJwtToken({
+      userId: user._id,
+      sessionId: session._id,
+    });
+
+    const refreshToken = signJwtToken({
+      sessionId: session._id,
+    });
 
     return {
       user,
       accessToken,
       refreshToken,
       mfaRequired: false,
+    };
+  }
+
+  // Refresh
+  public async refreshToken(refreshToken: string) {
+    const { payload } = verifyJwtToken<RefreshTPayload>(refreshToken, {
+      secret: refreshTokenSignOptions.secret,
+    });
+    if (!payload) {
+      throw new UnauthorizedException("Invalid refresh token");
+    }
+    const session = await SessionModel.findById(payload.sessionId);
+    const now = Date.now();
+    if (session?.expiredAt.getTime() <= now) {
+      throw new UnauthorizedException("Session expired");
+    }
+    const sessionRefresh = session?.expiredAt.getTime() - now <= ONE_DAY_IN_MS;
+
+    if (sessionRefresh) {
+      session.expiredAt = calculateExpirationDate(
+        config.JWT.REFRESH_EXPIRES_IN,
+      );
+    }
+    await session.save();
+
+    const newRefreshToken = sessionRefresh
+      ? signJwtToken(
+          {
+            sessionId: session._id,
+          },
+          refreshTokenSignOptions,
+        )
+      : undefined;
+    const accessToken = signJwtToken(
+      {
+        sessionId: session?._id,
+      },
+      refreshTokenSignOptions,
+    );
+    return {
+      accessToken,
+      newRefreshToken,
     };
   }
 }
