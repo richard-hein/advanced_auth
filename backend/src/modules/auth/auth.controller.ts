@@ -3,16 +3,22 @@ import { asyncHandler } from "../../middlewares/asyncHandler.js";
 import type { AuthService } from "./auth.service.js";
 import { HTTPSTATUS } from "../../config/http.config.js";
 import {
+  emailSchema,
   loginSchema,
   registerSchema,
+  resetPasswordSchema,
   verificationSchema,
 } from "../../common/validators/auth.validators.js";
 import {
+  clearAuthenticationCookies,
   getAccessTokenCookieOptions,
   getRefreshTokenCookieOptions,
   setAuthenticationCookies,
 } from "../../common/utils/cookie.js";
-import { UnauthorizedException } from "../../common/utils/catch-error.js";
+import {
+  NotFoundException,
+  UnauthorizedException,
+} from "../../common/utils/catch-error.js";
 
 export class AuthController {
   private authService: AuthService;
@@ -84,6 +90,43 @@ export class AuthController {
       await this.authService.verifyEmail(code);
       return res.status(HTTPSTATUS.OK).json({
         message: "Email verified successfully",
+      });
+    },
+  );
+
+  public forgotPassword = asyncHandler(
+    async (req: Request, res: Response): Promise<any> => {
+      const email = emailSchema.parse(req.body.email);
+      await this.authService.forgotPassword(email);
+
+      return res.status(HTTPSTATUS.OK).json({
+        message: "Password reset email has been send",
+      });
+    },
+  );
+
+  public resetPassword = asyncHandler(
+    async (req: Request, res: Response): Promise<any> => {
+      const body = resetPasswordSchema.parse(req.body);
+
+      await this.authService.resetPassword(body);
+
+      return clearAuthenticationCookies(res).status(HTTPSTATUS.OK).json({
+        message: "Reset password successfully",
+      });
+    },
+  );
+
+  public logout = asyncHandler(
+    async (req: Request, res: Response): Promise<any> => {
+      const sessionId = req.sessionId;
+      if (!sessionId) {
+        throw new NotFoundException("Session is invalid.");
+      }
+      await this.authService.logout(sessionId);
+
+      return clearAuthenticationCookies(res).status(HTTPSTATUS.OK).json({
+        message: "User logout successfully.",
       });
     },
   );

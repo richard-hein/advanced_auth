@@ -6,8 +6,13 @@ export interface RegisterDto {
   userAgent?: string;
 }
 
-export interface loginDto {
+export interface LoginDto {
   email: string;
   password: string;
   userAgent?: string;
+}
+
+export interface ResetPasswordDto {
+  password: string;
+  verificationCode: string;
 }
