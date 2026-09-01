@@ -2,7 +2,11 @@ import type { Request, Response } from "express";
 import { asyncHandler } from "../../middlewares/asyncHandler.js";
 import type { MfaService } from "./mfa.service.js";
 import { HTTPSTATUS } from "../../config/http.config.js";
-import { verifyMfaSchema } from "../../common/validators/mfa.validator.js";
+import {
+  verifyMfaForLoginSchema,
+  verifyMfaSchema,
+} from "../../common/validators/mfa.validator.js";
+import { setAuthenticationCookies } from "../../common/utils/cookie.js";
 
 export class MfaController {
   private mfaService: MfaService;
@@ -69,7 +73,6 @@ export class MfaController {
           message: "Verified & login successfully",
           user,
         });
-    }
+    },
   );
-}
 }
